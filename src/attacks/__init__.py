@@ -1,9 +1,21 @@
+"""Public exports for the authorized red-team package."""
+
 from attacks.attacks import (
-    adversarial_prompts,
-    run_attacks,
     RED_TEAM_PROMPT,
+    adversarial_prompts,
     generate_ai_attacks,
-    classify_attack_outcome,
+    response_leaked_secrets,
+    response_looks_blocked,
+    run_attacks,
     save_attack_results,
-    write_run_attack_json,
 )
+
+__all__ = [
+    "RED_TEAM_PROMPT",
+    "adversarial_prompts",
+    "generate_ai_attacks",
+    "response_leaked_secrets",
+    "response_looks_blocked",
+    "run_attacks",
+    "save_attack_results",
+]
