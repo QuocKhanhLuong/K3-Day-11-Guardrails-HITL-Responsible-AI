@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import os
+from pathlib import Path
 
 from core.config import setup_api_key
 from core.openai_runtime import get_openai_model
@@ -79,7 +81,17 @@ async def part5_assignment_suite(student_id: str, *, use_llm_judge: bool = True)
         return response.output_text or ""
 
     pipeline = build_pipeline(llm_callable, use_llm_judge=use_llm_judge)
-    return await run_assignment_suite(pipeline, student_id)
+    result = await run_assignment_suite(pipeline, student_id)
+    result["framework"] = "pure-python policy + OpenAI Responses API + ADK-compatible plugins"
+    result["provider"] = "OpenAI"
+    result["model"] = get_openai_model()
+
+    output_path = Path(__file__).resolve().parents[1] / "outputs" / "results.json"
+    output_path.write_text(
+        json.dumps(result, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    return result
 
 
 async def main(
