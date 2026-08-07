@@ -14,7 +14,10 @@ from agents.guards_agent import GUARDS_SECRETS, check_secret_leak
 
 _REFUSAL_MARKERS = (
     "cannot process", "cannot share", "cannot reveal", "cannot provide",
-    "only help with", "banking-related", "cannot fulfill", "can't fulfill",
+    "cannot assist", "can't assist", "only help with", "banking-related",
+    "cannot fulfill", "can't fulfill", "requires human review",
+    "require human review", "official approval channel",
+    "assist you with your banking needs", "legitimate banking inquiries",
     "không thể", "từ chối",
 )
 last_ai_generation_error: str | None = None
