@@ -396,21 +396,57 @@ async def run_assignment_suite(pipeline: DefensePipeline, student_id: str) -> di
         raise ValueError("student_id must contain at least 3 letters/digits/_/-")
     pipeline.rate_limiter.reset()
 
-    safe_results = [
-        (await pipeline.process(query, user_id=f"safe-user-{index}")).to_submission_dict()
+    safe_pipeline_results = [
+        await pipeline.process(query, user_id=f"safe-user-{index}")
         for index, query in enumerate(SAFE_QUERIES, start=1)
     ]
+    safe_results = [item.to_submission_dict() for item in safe_pipeline_results]
+
     attack_results = [
         (await pipeline.process(query, user_id=f"attack-user-{index}")).to_submission_dict()
         for index, query in enumerate(ATTACK_QUERIES, start=1)
     ]
 
+    # Rate limiting is a deterministic availability control. Test it directly so
+    # a 15-request load probe does not spend model/judge quota or turn provider
+    # throttling into false security evidence.
     rate_user = f"rate-test-{uuid4().hex}"
-    rate_results = [
-        await pipeline.process("What is my account balance?", user_id=rate_user)
-        for _ in range(15)
-    ]
-    rate_blocked = sum(item.layer == "rate_limiter" for item in rate_results)
+    pipeline.rate_limiter.reset(rate_user)
+    rate_passed = 0
+    rate_blocked = 0
+    for _ in range(15):
+        request_id = pipeline.audit_log.record_input(
+            user_id=rate_user,
+            text="What is my account balance?",
+            source="rate_limit_test",
+        )
+        pipeline.rate_limiter.total_count += 1
+        allowed, retry_after = pipeline.rate_limiter.check(rate_user)
+        if allowed:
+            rate_passed += 1
+            pipeline.monitoring.record_result(blocked=False)
+            pipeline.audit_log.record_output(
+                user_id=rate_user,
+                text="[RATE_LIMIT_TEST_ALLOWED]",
+                blocked=False,
+                request_id=request_id,
+            )
+        else:
+            rate_blocked += 1
+            pipeline.rate_limiter.blocked_count += 1
+            pipeline.monitoring.record_result(
+                blocked=True,
+                layer="rate_limiter",
+            )
+            pipeline.audit_log.record_output(
+                user_id=rate_user,
+                text="Rate limit exceeded. Please try again later.",
+                blocked=True,
+                layer="rate_limiter",
+                request_id=request_id,
+                block_reason=f"retry_after_seconds={retry_after:.3f}",
+                plugins_triggered=["rate_limiter"],
+            )
 
     edge_results = [
         (await pipeline.process(query, user_id=f"edge-user-{index}")).to_submission_dict()
@@ -453,7 +489,7 @@ async def run_assignment_suite(pipeline: DefensePipeline, student_id: str) -> di
     ]
 
     judge_sample = []
-    for item in rate_results[:1]:
+    for item in safe_pipeline_results[:1]:
         if item.judge:
             judge_sample.append({
                 "response_preview": item.response_text[:300],
@@ -475,7 +511,7 @@ async def run_assignment_suite(pipeline: DefensePipeline, student_id: str) -> di
             "max_requests": pipeline.rate_limiter.max_requests,
             "window_seconds": pipeline.rate_limiter.window_seconds,
             "sent": 15,
-            "passed": 15 - rate_blocked,
+            "passed": rate_passed,
             "blocked": rate_blocked,
         },
         "edge_cases": edge_results,

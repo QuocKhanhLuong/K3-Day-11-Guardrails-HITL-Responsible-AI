@@ -1,11 +1,10 @@
-"""Reliable helpers for sending messages through Google ADK runners."""
+"""Reliable helpers for OpenAI runners and legacy ADK-compatible tests."""
 from __future__ import annotations
 
 from google.genai import types
 
 
 def _content_text(content) -> str:
-    """Extract text parts from an ADK/GenAI content object."""
     if not content or not getattr(content, "parts", None):
         return ""
     return "".join(
@@ -23,11 +22,15 @@ async def chat_with_agent(
 ):
     """Send one message and return ``(response_text, session)``.
 
-    The stream is fully consumed so callbacks finish. Only the latest final model
-    event is returned; tool/intermediate text is never concatenated into a fake
-    answer. A requested session ID is preserved when a new session is created.
+    New runtime adapters expose ``runner.chat``. The ADK branch remains only for
+    starter/public-test compatibility and can still consume final ADK events.
     """
-    del agent  # Runner owns the active agent; retained for starter API compatibility.
+    if callable(getattr(runner, "chat", None)):
+        return await runner.chat(
+            str(user_message), session_id=session_id, user_id=user_id
+        )
+
+    del agent
     app_name = runner.app_name
     session = None
 
@@ -68,10 +71,8 @@ async def chat_with_agent(
         text = _content_text(event_content)
         if not text:
             continue
-
         if getattr(event_content, "role", None) == "model":
             last_model_text = text
-
         is_final = getattr(event, "is_final_response", None)
         if callable(is_final) and is_final():
             final_text = text
