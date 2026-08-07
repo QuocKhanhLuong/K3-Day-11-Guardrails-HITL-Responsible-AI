@@ -9,7 +9,7 @@ import sys
 from dotenv import load_dotenv
 
 _PLACEHOLDER_KEYS = {
-    "your-google-ai-studio-key-here",
+    "your-openai-api-key-here",
     "your-api-key-here",
     "paste-your-key-here",
     "changeme",
@@ -17,30 +17,26 @@ _PLACEHOLDER_KEYS = {
 
 
 def setup_api_key(*, prompt_if_missing: bool = True) -> str:
-    """Load and validate ``GOOGLE_API_KEY`` without hanging in CI.
-
-    Environment variables win over ``.env``. Interactive prompting is used only
-    when stdin is a terminal; automated runs fail with a clear error instead of
-    silently accepting the placeholder from ``.env.example``.
-    """
+    """Load and validate ``OPENAI_API_KEY`` without hanging in CI."""
     root = Path(__file__).resolve().parents[2]
     load_dotenv(root / ".env", override=False)
 
-    key = os.environ.get("GOOGLE_API_KEY", "").strip()
+    key = os.environ.get("OPENAI_API_KEY", "").strip()
     if key.casefold() in _PLACEHOLDER_KEYS:
         key = ""
 
     if not key and prompt_if_missing and sys.stdin.isatty():
-        key = getpass("GOOGLE_API_KEY: ").strip()
+        key = getpass("OPENAI_API_KEY: ").strip()
 
     if not key or key.casefold() in _PLACEHOLDER_KEYS:
         raise RuntimeError(
-            "GOOGLE_API_KEY is missing or still a placeholder. "
-            "Copy .env.example to .env and add a Google AI Studio key."
+            "OPENAI_API_KEY is missing or still a placeholder. "
+            "Copy .env.example to .env and add an OpenAI API key."
         )
 
-    os.environ["GOOGLE_API_KEY"] = key
-    os.environ.setdefault("GOOGLE_GENAI_USE_VERTEXAI", "0")
+    os.environ["OPENAI_API_KEY"] = key
+    os.environ.setdefault("OPENAI_MODEL", "gpt-4.1-mini")
+    os.environ.setdefault("OPENAI_JUDGE_MODEL", os.environ["OPENAI_MODEL"])
     return key
 
 
