@@ -1,191 +1,95 @@
-# Day 11 — Controlled Agent Security (2026)
+# Day 11 — Controlled Agent Security
 
-Làm sao để ứng dụng agent an toàn hơn?
+**Sinh viên:** Lương Quốc Khánh  
+**MSSV:** 2A202601713  
+**Bài làm:** cá nhân
 
-**Hình thức:** bài tập **cá nhân** (1 người / 1 MSSV).
+## Mục tiêu
 
-**Đề bài duy nhất:** [`assignment11.md`](assignment11.md) · Cách nộp: [`SUBMISSION.md`](SUBMISSION.md)
+Xây dựng pipeline an toàn cho VinBank theo luồng:
 
----
+```text
+User / Email / RAG
+    → Rate limiter
+    → Direct + indirect input guardrails
+    → Gemini
+    → Output redaction
+    → Multi-criteria LLM-as-Judge
+    → Action permission + HITL
+    → Deterministic egress policy
+    → Audit log + monitoring
+```
 
-## Cài đặt môi trường (làm trước)
+Email, RAG, web và tool output luôn được coi là **data**, không phải nguồn có quyền thay đổi policy hay tự phê duyệt hành động.
+
+## Cài đặt
 
 ```powershell
-# 1) Tạo + kích hoạt virtualenv (khuyến nghị)
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-
-# 2) API key
 Copy-Item .env.example .env
-# Mở .env, dán GOOGLE_API_KEY — lấy tại https://aistudio.google.com/apikey
-
-# 3) Cài dependency trong venv
+# Điền GOOGLE_API_KEY vào .env
 python -m pip install -U pip
 pip install -r requirements.txt
 ```
 
-Mỗi lần mở terminal mới: `.\.venv\Scripts\Activate.ps1` rồi mới chạy code.
+macOS/Linux:
 
-Nếu PowerShell báo không cho chạy script:  
-`Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`
-
-PowerShell (nếu chưa load `.env`):
-
-```powershell
-$env:GOOGLE_API_KEY="dán-key-của-bạn"
+```bash
+python -m venv .venv
+source .venv/bin/activate
+cp .env.example .env
+python -m pip install -U pip
+pip install -r requirements.txt
 ```
 
----
+## Chạy bài
 
-## Rubric (tóm tắt)
+Từ thư mục gốc:
 
-Chi tiết đầy đủ trong [`assignment11.md`](assignment11.md).
-
-| Năng lực | Điểm | Bạn làm gì |
-|---|---:|---|
-| Direct + indirect guardrails | 35 | Xử lý jailbreak, email/RAG untrusted, Unicode và false positive |
-| Permission + HITL | 35 | Egress allowlist, high-risk action, approval/reject/timeout/audit |
-| Output + incident response | 20 | Redact PII/secret, monitoring, correlation trace |
-| Red team | 10 | Attack taxonomy và report source-to-sink |
-| Bonus | +10 | Verifier replay xác nhận Guards leak; không tin transcript tự khai |
-
-**Gợi ý:** làm **Phòng thủ (A)** trước, **Tấn công (B)** sau.
-
-**Hạn nộp:** Thứ sáu **7/8**, **23:59 giờ Việt Nam (ICT)**.
-
-| Tài liệu | Dùng để |
-|----------|---------|
-| [`assignment11.md`](assignment11.md) | **Đề bài duy nhất** (rubric + cách chạy A/B) |
-| [`SUBMISSION.md`](SUBMISSION.md) | Cách nộp, tên file, cấu trúc thư mục |
-
----
-
-## Timeline buổi lab
-
-Hình thức: **cá nhân** (1 người / 1 MSSV). Luồng: **Setup → A → Break → B → Break → Demo**.
-
-| # | Phần | Nội dung | Thời lượng |
-|---|------|----------|-----------:|
-| 0 | **Setup** | Cài đặt môi trường (`pip`, `GOOGLE_API_KEY`, chạy local) | 30' |
-| 1 | **A · Phòng thủ** | 2A Input · 2B Output · 2C NeMo · Part 3 Testing · Part 4 HITL | 120' |
-| — | **Break** | Nghỉ giải lao | 10' |
-| 2 | **B · Tấn công** | Tấn công **Unsafe** (điểm B) + **Guards** (điểm cộng nếu LEAKED) | 60' |
-| — | **Break** | Nghỉ giải lao | 10' |
-| 3 | **Demo** | Demo cá nhân · attack prompting (cuối buổi) | 45' |
-| | **Tổng** | Nội dung lab (+ nghỉ) | **245'** |
-| | | + Setup | **+30'** |
-
-**Điểm cộng Demo (trên lớp):** lên demo **+1** (nếu defense chặn thành công ≥5 prompt thì **×2**) · tấn công thành công (LEAKED) **+2**.
-
-Chi tiết mốc Part B (60'):
-
-| Mốc | Việc làm |
-|-----|----------|
-| 0–25' | TODO 13 — viết ≥5 prompt tấn công nâng cao trong `src/attacks/attacks.py` |
-| 25–45' | Chạy attack trên unsafe rồi guards; quan sát `LEAKED` / `no secret leak` |
-| 45–60' | TODO 14 — AI red team ≥5 attack; lưu `outputs/attack_results.json` |
-
-Slide đầy đủ + timer trên lớp: [`Slide_Lab_Day11.html`](Slide_Lab_Day11.html).
-
----
-
-## Tình huống
-
-Chatbot ngân hàng **VinBank**. Agent “unsafe” cố ý chứa mật khẩu / API key trong system prompt.
-
-```
-Câu hỏi người dùng
-    → Rate Limiter
-    → Lọc đầu vào (Input Guardrails)
-    → LLM trả lời
-    → Lọc đầu ra (Output Guardrails + Judge)
-    → Audit / Monitoring
-    → Phản hồi
-```
-
----
-
-## Làm bài trên máy
-
-> Đã cài môi trường ở mục **Cài đặt môi trường** phía trên chưa? Nếu chưa thì làm trước.
-
-### Phần A — Phòng thủ
-
-**Thứ tự:** sửa TODO trong file → rồi mới chạy lệnh. Chi tiết: [`assignment11.md`](assignment11.md) §5.
-
-| Làm trước | File |
-|-----------|------|
-| TODO **1–3** | `src/guardrails/input_guardrails.py` |
-| TODO **4–6** | `src/guardrails/output_guardrails.py` |
-| TODO **7** (tuỳ chọn) | `src/guardrails/nemo_guardrails.py` |
-| TODO **8** (+ egress 8A) | `src/assignment/*.py` → rồi `python main.py --part 5` |
-| TODO **9–10** | `src/testing/testing.py` |
-| TODO **11–12** | `src/hitl/hitl.py` |
-| TODO **13–14** (phần B) | `src/attacks/attacks.py` |
-
-Sau khi đã code, kiểm:
-
-```powershell
+```bash
 cd src
-python main.py --part 2    # sau TODO 1–6 (+7 NeMo)
-python main.py --part 3    # sau TODO 9–10
-python main.py --part 4    # sau TODO 11–12
-python main.py --part 5    # sau TODO 8 → outputs/results.json (+ audit/metrics)
+python main.py --part 2 --student-id 2A202601713
+python main.py --part 4 --student-id 2A202601713
+python main.py --part 5 --student-id 2A202601713
+python main.py --part 1 --student-id 2A202601713
 ```
 
-```powershell
+Trong lúc debug deterministic layers có thể dùng:
+
+```bash
+python main.py --part 5 --student-id 2A202601713 --no-llm-judge
+```
+
+Không dùng kết quả `--no-llm-judge` làm evidence cuối nếu báo cáo khẳng định đã chạy LLM-as-Judge.
+
+## Kiểm thử
+
+```bash
 pytest tests/smoke -q
 pytest tests/public -q
 python scripts/grade.py --submission-dir . --out outputs/grade_report.json
 ```
 
-Viết `report/<MSSV>_report.md`.
+## Thành phần chính
 
-### Phần B — Red team và bonus
+- `src/guardrails/input_guardrails.py`: NFKC, loại zero-width, direct/indirect injection, topic và edge validation.
+- `src/guardrails/output_guardrails.py`: redact PII/secret và judge 4 tiêu chí.
+- `src/assignment/rate_limiter.py`: sliding window theo từng user.
+- `src/assignment/pipeline.py`: orchestration, provenance, action authorization và `is_egress_allowed()`.
+- `src/hitl/hitl.py`: confidence router, approve/reject/timeout, reviewer context và correlation ID.
+- `src/assignment/audit_log.py`: request-correlated audit JSON.
+- `src/assignment/monitoring.py`: block-rate, rate-limit, judge-fail alerts và snapshot replay.
+- `src/attacks/attacks.py`: direct, indirect, obfuscation, authority, action và egress attacks chạy trên target thật.
 
-1. Viết ≥5 prompt vào `src/attacks/attacks.py`
-2. Chạy (tấn công **unsafe** rồi **guards**):
+## Evidence phải có trước khi nộp
 
-```powershell
-cd src
-python main.py --part 1
+```text
+outputs/results.json
+outputs/audit_log.json
+outputs/metrics.json
+outputs/attack_results.json
+report/2A202601713_report.md
 ```
 
-3. Unsafe = attack target để phân tích. Guards (`src/agents/guards_agent.py`) = **bonus chỉ khi verifier replay xác nhận leak**.
-4. Lưu `outputs/attack_results.json` làm evidence; không tự cấp runtime score hoặc bonus.
-
-Colab / Jupyter (tuỳ chọn): `notebooks/lab11_guardrails_hitl.ipynb`. Local là đủ.
-
-Nộp theo [`SUBMISSION.md`](SUBMISSION.md).
-
----
-
-## Cấu trúc repo
-
-```
-├── assignment11.md                    ← Đề bài duy nhất
-├── SUBMISSION.md                      ← Quy định nộp
-├── data/pii_hallucination_samples.json ← PII + ground_truth đối chiếu hallucination
-├── src/
-│   ├── assignment/                    ← Hạng mục A (Phòng thủ) — starters
-│   ├── attacks/                       ← Hạng mục B (Tấn công)
-│   ├── agents/security_boundary.py    ← Reference provenance / action boundary
-│   ├── agents/guards_agent.py         ← Guards Agent (mục tiêu bonus)
-│   ├── guardrails/ testing/ hitl/     ← Module hỗ trợ phòng thủ
-│   └── main.py
-├── notebooks/lab11_guardrails_hitl.ipynb
-├── schemas/results.schema.json
-├── scripts/grade.py
-├── tests/
-├── Slide_Lab_Day11.html
-└── .env.example
-```
-
----
-
-## Tài liệu tham khảo
-
-- [OWASP Top 10 for LLM](https://owasp.org/www-project-top-10-for-large-language-model-applications/)
-- [NeMo Guardrails](https://github.com/NVIDIA/NeMo-Guardrails)
-- [Google ADK](https://google.github.io/adk-docs/)
-- [AI Safety Fundamentals](https://aisafetyfundamentals.com/)
+Các file output phải được sinh từ lần chạy thật với API key. Lỗi API/runtime được ghi là `error`, không tính là guardrail chặn thành công.
